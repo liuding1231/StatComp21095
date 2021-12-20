@@ -1,0 +1,1102 @@
+---
+title: "Homeworks2"
+author: "Liu Dingding"
+date: "2021/12/16"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Homeworks2}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+## Question 8.2
+Implement the bivariate Spearman rank correlation test for independence
+ as a permutation test. The Spearman rank correlation test statistic can be obtained from function cor with method = "spearman". Compare the
+achieved significance level of the permutation test with the p-value reported by cor.test on the same samples.
+
+## Anwser
+This example tests whether the  distributions of petal length and sepal length of iris setosa are independent.
+ To implement a permutation test, write a function to compute the replicates of the test statistic that takes as its first argument the data matrix and as its second argument the permutation vector.
+The permutation test procedure for independence permutes the row indices of one of the samples.
+```{r}
+cor.sprman<-function(z,ix){
+  #compute the Spearman rank correlation test statistic
+  #z:two samples x and y
+  #ix:a permutation of row indices of y
+  x<-z[,1]
+  y<-z[ix,2]#permutate rows of y
+  return(cor(x,y,method = "spearman"))
+}
+```
+
+Large absolute values of cor.sprman support the alternative hypothesis that the two samples is not irrelevant.
+```{r}
+set.seed(123)
+library(boot)
+z<-as.matrix(iris[1:50,c(1,3)])#Sepal.length and Petal.length
+asl<-numeric(4)
+asl<-replicate(4,expr={#compute achieved significance level of the permutation test
+  boot.obj<-boot(data=z,statistic=cor.sprman,R=999,sim="permutation")
+  tb<-c(boot.obj$t0,boot.obj$t)
+  hist(tb,nclass="scott",xlab="cor_spearman",main="",freq=FALSE,)
+  points(boot.obj$t0,0,cex=1,pch=16)
+  mean(abs(tb)>=boot.obj$t0)
+})
+```
+
+We implement permutation tests four times.The  four histograms of replicates of the Spearman rank correlation test statistic are shown in above Figure with points of the observation for the statistic($t0).
+
+```{r}
+print(asl)
+```
+The achieved significance levels of the permutation test are $0.057,0.059,0.046, 0.051$,so the null hypothesis of independence is rejected at $\alpha = 0.10$.
+
+```{r}
+x<-z[,1]#Sepal.length
+y<-z[,2]#Petal.length
+c<-cor.test(x,y,alternative="two.sided",method="spearman",exact = FALSE)
+print(c$p.value)
+```
+The p-value reported by cor.test on the same samples Sepal.length and Petal.length is $0.04985095$.
+
+Compared with the p-value by cor.test,the four achieved significance levels we get(0.057,0.059,0.046, 0.051) is varying.
+
+## Question 
+Design experiments for evaluating the performance of the NN,
+energy, and ball methods in various situations.
+
+(1)Unequal variances and equal expectations
+
+(2)Unequal variances and unequal expectations
+
+(3)Non-normal distributions: t distribution with 1 df (heavy-tailed
+distribution), bimodel distribution (mixture of two normal
+distributions)
+
+(4) Unbalanced samples (say, 1 case versus 10 controls)
+
+Note: The parameters should be chosen such that the powers
+are distinguishable (say, range from 0.3 to 0.8)
+
+## Anwser
+The approximate permutation energy test is implemented in eqdist.etest
+in the energy package.And R package "Ball" gives Ball statistic.
+So firstly we write a function to compute Nearest neighbor statistic:
+```{r}
+library(MASS)
+library(RANN)#for nn2 function 
+library(energy)#for eqdist.etest()
+library(Ball)
+knn<-function(z,ix,sizes,k){
+  #compute k-Nearest neighbor statistic
+  n1<-sizes[1]
+  n2<-sizes[2]
+  n<-n1+n2
+  if(is.vector(z))z<-data.frame(z)
+  z<-z[ix,]
+  NN<-nn2(z,k=k+1)
+  block1<-NN$nn.idx[1:n1,-1]
+  block2<-NN$nn.idx[(n1+1):n,-1]
+  i1<-sum(block1<n1+.5)
+  i2<-sum(block2>n1+.5)
+  return((i1+i2)/(k*n))
+}
+knn.test<-function(z,sizes,k){
+  boot.obj <- boot(data=z,statistic=knn,R=999, sim="permutation", sizes = sizes,k=k)
+  tb<- c(boot.obj$t0,boot.obj$t)
+  p.value <- mean(tb>=boot.obj$t0)
+  list(statistic=boot.obj$t0,p.value=p.value)
+}
+```
+
+(1) Unequal variances and equal expectations
+
+we produce random variables from the below two multi-normal distributions:
+$N(\mu_1,\Sigma_1)$and$N(\mu_2,\Sigma_2)$
+where$$\mu_1=\mu_2=(0,0,0)$$
+$$\Sigma_1=\begin{pmatrix}
+1&0&0\\
+0&1&0\\
+0&0&1\\
+\end{pmatrix}
+\Sigma_2=\begin{pmatrix}
+3&0&0\\
+0&2&0\\
+0&0&3\\
+\end{pmatrix}$$
+
+Then we implement three permutation tests:
+```{r}
+mu2<-mu1<-c(0,0,0)
+s1<-diag(3)
+s2<-matrix(c(3,0,0,0,2,0,0,0,3),nrow=3,ncol=3)
+n1=n2=15
+n <- n1+n2 
+N = c(n1,n2)
+k=3
+m=100
+powr<- numeric(3)#store power for three kinds tests
+set.seed(11)
+p.values<-replicate(m,expr = {
+  ##compute p-values for nn,energy,ball methods
+  x<- mvrnorm(n1,mu1,s1)
+  y<- mvrnorm(n2,mu2,s2)
+  z<- rbind(x,y)
+  p1 <- knn.test(z,sizes=N,k)$p.value#NN method
+  p2<- eqdist.etest(z,sizes=N,R=999)$p.value#energy method
+  p3 <- bd.test(x,y,num.permutations=999)$p.value#ball method
+  list(p1,p2,p3)
+})
+for(i in 1:3){
+  powr[i]=mean(as.numeric(p.values[i,])<0.05)##set alpha as 0.05
+} 
+print(c(power_nn=powr[1],power_energy=powr[2],power_ball=powr[3]))
+
+```
+From the result we can see that the power of Ball method is obviously higher than the other two methods.And NN method performs better than energy method. 
+
+(2) Unequal variances and unequal expectations
+
+We produce  random variables from the below two multi-normal distributions:
+$N(\mu_1,\Sigma_1)$and$N(\mu_2,\Sigma_2)$
+where$$\mu_1=(0,0,0),\mu_2=(1,1,1)$$
+$$\Sigma_1=\begin{pmatrix}
+1&0&0\\
+0&1&0\\
+0&0&1\\
+\end{pmatrix}
+\Sigma_2=\begin{pmatrix}
+2&0&0\\
+0&2&0\\
+0&0&3\\
+\end{pmatrix}$$
+
+Then we implement three permutation tests:
+```{r}
+mu1<-c(0,0,0);mu2<-c(1,1,1)
+s1<-diag(3)
+s2<-matrix(c(2,0,0,0,2,0,0,0,3),nrow=3,ncol=3)
+n1=n2=15
+n <- n1+n2 
+N = c(n1,n2)
+k=3
+m=100
+powr<- numeric(3)#store power for three kinds tests
+set.seed(12)
+p.values<-replicate(m,expr = {
+  ##compute p-values for nn,energy,ball methods
+  x<- mvrnorm(n1,mu1,s1)
+  y<- mvrnorm(n2,mu2,s2)
+  z<- rbind(x,y)
+  p1 <- knn.test(z,sizes=N,k)$p.value#NN method
+  p2<- eqdist.etest(z,sizes=N,R=999)$p.value#energy method
+  p3 <- bd.test(x,y,num.permutations=999)$p.value#ball method
+  list(p1,p2,p3)
+})
+for(i in 1:3){
+  powr[i]=mean(as.numeric(p.values[i,])<0.05)##set alpha as 0.05
+} 
+print(c(power_nn=powr[1],power_energy=powr[2],power_ball=powr[3]))
+
+```
+
+From the result we can see that Ball method performs best .And NN method performs worse than energy method.
+
+(3) Non-normal distributions: t distribution with 1 df (heavy-tailed
+distribution), bimodel distribution (mixture of two normal
+distributions)
+
+We produce  random variables from the below two non-normal distributions:t distribution  
+
+Then we implement three permutation tests:
+```{r}
+n1=n2=20
+n <- n1+n2 
+N = c(n1,n2)
+k=3
+m=100
+powr<- numeric(3)#store power for three kinds tests
+set.seed(111)
+p.values<-replicate(m,expr = {
+  ##compute p-values for nn,energy,ball methods
+  x<-as.matrix(rt(n1,1,2));y<-as.matrix(rt(n2,2,5))
+  z<- rbind(x,y)
+  p1 <- knn.test(z,sizes=N,k)$p.value#NN method
+  p2<- eqdist.etest(z,sizes=N,R=999)$p.value#energy method
+  p3 <- bd.test(x,y,num.permutations=999)$p.value#ball method
+  list(p1,p2,p3)
+})
+for(i in 1:3){
+  powr[i]=mean(as.numeric(p.values[i,])<0.05)##set alpha as 0.05
+} 
+print(c(power_nn=powr[1],power_energy=powr[2],power_ball=powr[3]))
+
+```
+From the result,the Ball method is also of best performance and energy method performs worst.
+
+Next,We produce  random variables from the below two non-normal distributions:bimodel distribution $$0.3N(0,1)+0.7N(1,4),0.5N(0,4)+0.5N(1,1),$$
+
+Then we implement three permutation tests:
+```{r}
+n1=n2=20
+n <- n1+n2 
+N = c(n1,n2)
+k=3
+m=100
+powr<- numeric(3)#store power for three kinds tests
+set.seed(111)
+p.values<-replicate(m,expr = {
+  ##compute p-values for nn,energy,ball methods
+  e1<-sample(0:1,size=20,replace=TRUE,prob = c(0.7,0.3))
+  x<-e1*rnorm(n1,0,1)+(1-e1)*rnorm(n1,1,2)#x is data from bimodel distribution
+  x<-as.matrix(x)
+  e2<-sample(0:1,size=20,replace=TRUE,prob = c(0.5,0.5))
+  y<-e2*rnorm(n2,0,2)+(1-e2)*rnorm(n2,1,1)#y is data from bimodel distribution
+  y<-as.matrix(y)
+  z<- rbind(x,y)
+  p1 <- knn.test(z,sizes=N,k)$p.value#NN method
+  p2<- eqdist.etest(z,sizes=N,R=999)$p.value#energy method
+  p3 <- bd.test(x,y,num.permutations=999)$p.value#ball method
+  list(p1,p2,p3)
+})
+for(i in 1:3){
+  powr[i]=mean(as.numeric(p.values[i,])<0.05)##set alpha as 0.05
+} 
+print(c(power_nn=powr[1],power_energy=powr[2],power_ball=powr[3]))
+
+```
+
+
+(4) Unbalanced samples:
+
+We produce two samples from the below two multi-normal distributions:
+$N(\mu_1,\Sigma_1)$and$N(\mu_2,\Sigma_2)$
+where$$\mu_1=\mu_2=(0,0,0)$$
+$$\Sigma_1=\begin{pmatrix}
+1&0&0\\
+0&1&0\\
+0&0&1\\
+\end{pmatrix}
+\Sigma_2=\begin{pmatrix}
+3&0&0\\
+0&2&0\\
+0&0&3\\
+\end{pmatrix}$$
+
+Then we implement three permutation tests,but the two sample sizes is 10 vs 100:
+```{r}
+mu2<-mu1<-c(0,0,0)
+s1<-diag(3)
+s2<-matrix(c(3,0,0,0,2,0,0,0,3),nrow=3,ncol=3)
+n1=10;n2=100
+n <- n1+n2 
+N = c(n1,n2)
+k=3
+m=100
+powr<- numeric(3)#store power for three kinds tests
+set.seed(11)
+p.values<-replicate(m,expr = {
+  ##compute p-values for nn,energy,ball methods
+  x<- mvrnorm(n1,mu1,s1)
+  y<- mvrnorm(n2,mu2,s2)
+  z<- rbind(x,y)
+  p1 <- knn.test(z,sizes=N,k)$p.value#NN method
+  p2<- eqdist.etest(z,sizes=N,R=999)$p.value#energy method
+  p3 <- bd.test(x,y,num.permutations=999)$p.value#ball method
+  list(p1,p2,p3)
+})
+for(i in 1:3){
+  powr[i]=mean(as.numeric(p.values[i,])<0.05)##set alpha as 0.05
+} 
+print(c(power_nn=powr[1],power_energy=powr[2],power_ball=powr[3]))
+
+```
+From the result,we can see that Ball method is still of best performance;it's power is much higher than the other methods.NN method is slightly better than energy.
+
+
+## Question 9.3
+1. Use the Metropolis-Hastings sampler to generate random variables from a
+standard Cauchy distribution. Discard the first 1000 of the chain, and compare the deciles of the generated observations with the deciles of the standard Cauchy distribution (see qcauchy or qt with df=1). Recall that a $Cauchy(\theta, \eta)$
+distribution has density function
+$$f(x) =\frac{1} {\theta\pi(1 + [(x − \eta)/\theta]2)}, −\infty<x< \infty, \theta> 0.$$
+The standard Cauchy has the $Cauchy(\theta = 1, \eta= 0)$ density. (Note that the standard Cauchy density is equal to the Student t density with one degree of
+freedom.)
+
+2. Use the Gelman-Rubin method
+to monitor convergence of the chain, and run the chain until it
+converges approximately to the target distribution according to
+$\hat{R} < 1.2$.
+
+## Anwser
+A standard Cauchy distribution has density function $f(x) =\frac{1} {\pi(1 + x^2)}, −\infty<x< \infty.$ i.e. $\theta=1,\eta=0$
+
+For the proposal distribution, try the normal distribution $N(X_t,\sigma^2)$.
+```{r}
+    set.seed(10)
+    m <- 10000
+    x <- numeric(m)#初始化随机向量
+    x[1] <- rnorm(1)
+    #建议分布选择方差为1的正态分布,从标准正态分布中生成X0并储存在x[1]中
+    k <- 0
+    u <- runif(m)
+
+    for (i in 2:m) {
+        xt <- x[i-1]
+        y <- rnorm(1,mean=xt,sd=1)#从N(Xt,1)=N(x[i-1],1)中生成y
+        num <- dcauchy(y) * dnorm(xt, mean=y,sd=1)
+        den <- dcauchy(xt) * dnorm(y, mean=xt,sd=1)
+        if (u[i] <= num/den){
+          x[i] <- y
+        } else {
+          x[i] <- xt
+          k <- k+1     #y is rejected
+        }
+    }
+    index<-5000:5500
+    y1 <- x[index]
+    plot(index, y1, type="l", main="", ylab="x")
+
+```
+
+The above figure present Part of a chain generated by a Metropolis-Hastings sampler of a standard Cauchy distribution 
+
+Standard Cauchy distribution has cdf:$F(x)=\frac{arctan x}{\pi}+\frac{1}{2},−\infty<x< \infty.$
+
+So we can conduct an explicit formula for the quantiles of
+the Standard Cauchy distribution as:$$x_q=F^{-1}(q)=tan(\pi(q-0.5))$$
+```{r}
+
+    b <- 1001      #discard the burn-in sample
+    y <- x[b:m]
+    a <- seq(0.1,0.9,0.1)
+    QC<- tan(pi*(a-0.5)) #quantiles of Cauchy
+    Q <- quantile(x, a) #the deciles of the generated chain
+    par(mfrow=c(1,2))
+    hist(y, breaks="scott", main="Standard Cauchy", xlab="", freq=FALSE)
+    lines(QC, dcauchy(QC),col='blue')
+    qqplot(QC, Q, main="",xlab="Cauchy deciles", ylab="Sample deciles")
+    abline(0,1,col='red',lwd=2)
+    
+```
+The histogram of the generated sample with the Standard Cauchy density
+superimposed is shown in left figure and the QQ plot is shown in the right Figure. From the plot, it appears
+that the sample Deciles are in approximate agreement with the theoretical
+Deciles. 
+
+Next we ues the Gelman-Rubin method to  monitor the convergence of the above chain.
+```{r}
+    Gelman.Rubin <- function(psi) {
+        # psi[i,j] is the statistic psi(X[i,1:j])
+        # for chain in i-th row of X
+        psi <- as.matrix(psi)
+        n <- ncol(psi)
+        k <- nrow(psi)
+
+        psi.means <- rowMeans(psi)     #row means
+        B <- n * var(psi.means)        #between variance est.
+        psi.w <- apply(psi, 1, "var")  #within variances
+        W <- mean(psi.w)               #within est.
+        v.hat <- W*(n-1)/n + (B/n)     #upper variance est.
+        r.hat <- v.hat / W             #G-R statistic
+        return(r.hat)
+        }
+
+    cauchy.chain <- function( sigma,N, X1) {
+        #generates a Metropolis chain for stantard cauchy distribution
+        #with Normal(X[t], 1) proposal distribution
+        #and starting value X1
+        x <- rep(0, N)
+        x[1] <- X1
+        u <- runif(N)
+
+        for (i in 2:N) {
+            xt <- x[i-1]
+            y <- rnorm(1, mean=xt, sd=sigma)     #candidate point
+            r1 <- dcauchy(y) * dnorm(xt, y, sd=sigma)
+            r2 <- dcauchy(xt) * dnorm(y, xt, sd=sigma)
+            r <- r1 / r2
+            if (u[i] <= r) x[i] <- y else
+                 x[i] <- xt
+            }
+        return(x)
+        }
+
+  
+    k <- 4          #number of chains to generate
+    n <- 15000      #length of chains
+    b <- 1000       #burn-in length
+
+    #choose overdispersed initial values
+    x0 <- c(-10, -5, 5, 10)
+
+    #generate the chains
+    set.seed(11)
+    sigma<-seq(1.5,2.5,0.1)
+    GR<-numeric(length(sigma))
+    for(j in 1:length(sigma)){
+      X <- matrix(0, nrow=k, ncol=n)
+      for (i in 1:k)
+        X[i, ] <- cauchy.chain(sigma[j],n, x0[i])
+
+      #compute diagnostic statistics
+      psi <- t(apply(X, 1, cumsum))
+      for (i in 1:nrow(psi))
+        psi[i,] <- psi[i,] / (1:ncol(psi))
+      GR[j]=Gelman.Rubin(psi)
+    }
+    print(GR)
+```
+According $\hat{R}<1.2$,so we choose sigma=1.9.
+
+
+
+```{r}
+    #plot psi for the four chains
+    sigma=1.9
+    X <- matrix(0, nrow=k, ncol=n)
+      for (i in 1:k)
+        X[i, ] <- cauchy.chain(sigma,n, x0[i])
+
+      #compute diagnostic statistics
+      psi <- t(apply(X, 1, cumsum))
+      for (i in 1:nrow(psi))
+        psi[i,] <- psi[i,] / (1:ncol(psi))
+    for (i in 1:k)
+      if(i==1){
+        plot((b+1):n,psi[i, (b+1):n],ylim=c(-2,2), type="l",
+            xlab='Index', ylab=bquote(phi))
+      }else{
+        lines(psi[i, (b+1):n], col=i)
+      }
+    print(Gelman.Rubin(psi))
+    par(mfrow=c(1,1)) #restore default
+    
+    #plot the sequence of R-hat statistics
+    rhat <- rep(0, n)
+    for (j in (b+1):n)
+        rhat[j] <- Gelman.Rubin(psi[,1:j])
+    plot(rhat[(b+1):n], type="l", xlab="", ylab="R")
+    abline(h=1.2, lty=2,col="blue")
+```
+The plot of $\hat{R}$ is shown in Figure for time
+1001 to 15000. The value of
+$\hat{R}$ is below 1.2 within 12000 iterations.
+
+## Question 9.8
+1. Consider the bivariate density
+$$f(x, y) \varpropto {n\choose x}y^{x+a−1}(1 − y)^
+{n−x+b−1}, x = 0, 1, . . . , n, 0 ≤ y ≤ 1.$$
+It can be shown  that for fixed a, b, n, the conditional distributions are Binomial(n, y) and Beta(x + a, n − x + b). Use the Gibbs sampler to
+generate a chain with target joint density f(x, y).
+
+2.use the Gelman-Rubin method
+to monitor convergence of the chain, and run the chain until it
+converges approximately to the target distribution according to
+$\hat{R} < 1.2$.
+
+## Anwser
+The  conditional densities of the given distribution is:$f(x|y)$ is the density of Binomial(n, y),$f(y|x)$ is the density of Beta(x + a, n − x + b).
+```{r}
+#initialize constants and parameters
+N <- 5000 #length of chain
+burn <- 1000 #burn-in length
+X <- matrix(0, N, 2) #the chain, a bivariate sample
+a=2;b=3;n=10#初始化参数
+x1=5;x2=0.5
+###### generate the chain #####
+set.seed(15)
+X[1, ] <- c(x1, x2) #initialize
+for (i in 2:N) {
+x2 <- X[i-1, 2]
+X[i, 1] <- rbinom(1, size=n, prob=x2)
+x1 <- X[i, 1]
+X[i, 2] <- rbeta(1, x1+a, n-x1+b)
+}
+bu <- burn + 1
+x <- X[bu:N, ]
+
+cat('Means: ',round(colMeans(x),2))
+cat('Standard errors: ',round(apply(x,2,sd),2))
+cat('Correlation coefficients: ', round(cor(x[,1],x[,2]),2))
+```
+
+```{r}
+plot(x[,1],type='l',col=1,lwd=2,xlab='Index',ylab='Random numbers')
+lines(x[,2],col=2,lwd=2)
+legend('bottomright',c(expression(X[1]),expression(X[2])),col=1:2,lwd=2)
+```
+
+Next we ues the Gelman-Rubin method to  monitor the convergence of the above chain.
+```{r}
+    Gelman.Rubin <- function(psi) {
+        # psi[i,j] is the statistic psi(X[i,1:j])
+        # for chain in i-th row of X
+        psi <- as.matrix(psi)
+        n <- ncol(psi)
+        k <- nrow(psi)
+
+        psi.means <- rowMeans(psi)     #row means
+        B <- n * var(psi.means)        #between variance est.
+        psi.w <- apply(psi, 1, "var")  #within variances
+        W <- mean(psi.w)               #within est.
+        v.hat <- W*(n-1)/n + (B/n)     #upper variance est.
+        r.hat <- v.hat / W             #G-R statistic
+        return(r.hat)
+        }
+
+        x.chain <- function( N, X1,yvalue) {
+        #generates a Metropolis chain for Binormial distribution
+        #with poisson(Xt) proposal distribution
+        #and starting value X1
+        x <- rep(0, N)
+        x[1] <- X1
+        u <- runif(N)
+
+        for (i in 2:N) {
+            xt <- x[i-1]
+            y <- rpois(1,lambda=xt)     #candidate point
+            r1 <- dbinom(y,size=10,prob=yvalue) * dpois(xt, y)#n=10
+            r2 <- dbinom(xt,size=10,prob=yvalue) * dpois(y, xt)
+            r <- r1 / r2
+            if (u[i] <= r) x[i] <- y else
+                 x[i] <- xt
+            }
+        return(x)
+        }
+        y.chain <- function( N, X1,xvalue) {
+        #generates a Metropolis chain for stantard cauchy distribution
+        #with chisq(X[t], 1) proposal distribution
+        #and starting value X1
+        x <- rep(0, N)
+        x[1] <- X1
+        u <- runif(N)
+
+        for (i in 2:N) {
+            xt <- x[i-1]
+            y <- rchisq(1, df=xt)     #candidate point
+            r1 <- dbeta(y,xvalue+2,13-xvalue) * dchisq(xt, y)#a=2,b=3
+            r2 <- dbeta(xt,xvalue+2,13-xvalue) * dchisq(y, xt)#a=2,b=3
+            r <- r1 / r2
+            if (u[i] <= r) x[i] <- y else
+                 x[i] <- xt
+            }
+        return(x)
+        }
+
+  
+    k <- 4          #number of chains to generate
+    n <- 15000      #length of chains
+    b <- 1000       #burn-in length
+
+    #choose overdispersed initial values
+    x0 <- c(1,2,3,4)
+    y0<-c(0.2,0.3,0.4,0.5)
+    #generate the chains
+    set.seed(16)
+      X <-Y<- matrix(0, nrow=k, ncol=n)
+      for (i in 1:k){
+        X[i, ] <- x.chain(n, x0[i],yvalue=0.8)
+        Y[i, ] <- y.chain(n, y0[i],xvalue=3)}
+      #compute diagnostic statistics
+      psi1 <- t(apply(X, 1, cumsum))
+      psi2 <- t(apply(Y, 1, cumsum))
+      for (i in 1:nrow(psi1)){
+        psi1[i,] <- psi1[i,] / (1:ncol(psi1))
+        psi2[i,] <- psi2[i,] / (1:ncol(psi2))}
+    print(c(Gelman.Rubin(psi1),Gelman.Rubin(psi2)))
+```
+Two Marginal distributions (we choose x=3;y=0.8) satisfy that $\hat{R}<1.2$.
+
+
+
+```{r}
+    #plot the sequence of R-hat statistics
+    rhat1<- rhat2<- rep(0, n)
+    for (j in (b+1):n){
+        rhat1[j] <- Gelman.Rubin(psi1[,1:j])
+        rhat2[j] <- Gelman.Rubin(psi2[,1:j])
+        }
+    plot(rhat1[(b+1):n], type="l", xlab="", ylab="R",ylim = c(1,1.3))
+    abline(h=1.2, lty=2,col="blue")
+    plot(rhat2[(b+1):n], type="l", xlab="", ylab="R")
+    abline(h=1.2, lty=2,col="blue")
+```
+
+
+we choose x=3 to monitor the convergence of distribution f(x,3) and y=0.8 to monitor the convergence of distribution f(0.8,y).The two figures tell us the chains are converging fast.The two values of $\hat{R}$ are both below 1.2 within 2000 iterations.
+
+
+## Question 11.3
+(a) Write a function to compute the kth term in$$\sum_{k=0}^{\infty}\frac{(-1)^k}{k!2^k}\frac{\parallel a\parallel^{2k+2}}{(2k + 1)(2k + 2)}\frac{\Gamma(\frac{d+1}{2})\Gamma(k+\frac{3}{2})}{\Gamma(k+\frac{d}{2}+1)},$$
+where $d\ge1$ is an integer, a is a vector in $R^d$, and $\parallel ·\parallel$ denotes the Euclidean
+norm. Perform the arithmetic so that the coefficients can be computed for
+(almost) arbitrarily large k and d. (This sum converges for all $a \in R^d$).
+(b) Modify the function so that it computes and returns the sum.
+(c) Evaluate the sum when $a = (1, 2)^T$ .
+
+## Anwser
+```{r}
+options(warn=-1)
+##compute terms
+fa<-function(k,a){
+  ##compute kth term for the series
+  d<-length(a)
+  i<-rep(c(1,-1),length=k)#1 or -1 for k
+  ik<-i[k]
+  k<-k-1
+  c1=exp(lgamma((d+1)/2)+lgamma(k+3/2)-lgamma(k+d/2+1))
+  c2<-factorial(k)*2^k*(2*k+1)*(2*k+2)
+  c<-ik*c1*norm(a)^(2*k+2)/c2
+  return(c)
+}
+
+
+##compute sum
+fb<-function(k,a){
+  ##return sum for k terms
+  d<-length(a)
+  i<-rep(c(1,-1),length=k)#1 or -1 for k
+  K<-0:(k-1)
+  c1=exp(lgamma((d+1)/2)+lgamma(K+3/2)-lgamma(K+d/2+1))
+  c2<-factorial(K)*2^K*(2*K+1)*(2*K+2)
+  c<-i*c1*norm(a)^(2*K+2)/c2
+  return(sum(c))
+}
+
+a<-matrix(c(1,2))
+print(c(fa(1,a),fa(2,a),fa(3,a)))#terms for k=0,1,2
+
+f<-k<-0:25
+for(i in 1:length(k))
+  f[i]<-fb(k[i],a)
+print(f[c(5,10,15,20,25)])#sums until k=4,9,14,19,24
+knitr::kable(rbind(k[15:25],f[15:25]))
+```
+From the result,we can see that the sum is $2.405440$ retaining 6 decimals when $k\ge6$.
+
+## Question 11.4
+ Find the intersection points $A(k)$ in $(0,\sqrt k)$ of the curves 
+ $$S_{k-1}(a)=P\Bigg(t(k-1)>\sqrt{\frac{a^2(k-1)}{k-a^2}}\Bigg)$$
+and$$S_{k}(a)=P\Bigg(t(k)>\sqrt{\frac{a^2k}{k+1-a^2}}\Bigg)$$
+for $k = 4 : 25, 100, 500, 1000$, where $t(k)$ is a Student t random variable with
+$k$ degrees of freedom. 
+
+## Anwser
+```{r}
+##function for S_k(a)
+sk<-function(a,k){
+  x<-sqrt(a^2*k/(k+1-a^2))
+  pt(x,df=k,lower.tail=FALSE)
+
+}
+f<-function(a,k) sk(a,k)-sk(a,k-1)#xlim is (0,sqrt(k))
+
+K<-c(4 : 25,100, 500, 1000)
+root1<-numeric(length(K))
+##first to find the approximation of the root for f
+a<-seq(0,5,0.01)
+plot(a,f(a,100),lty=1,type="l",xlim=c(0,5))
+lines(a,f(a,500),lty=2,col="blue",xlim=c(0,5))
+lines(a,f(a,1000),lty=3,col="red",xlim=c(0,5))
+abline(h=0)
+legend("topright", legend=c("k=100", "k=500", "k=1000"), lty=1:3)
+
+```
+
+We can get a appropriate interval $(1,2)$ contained root value.
+```{r}
+for(i in 1:length(K)){
+  k<-K[i]
+  out<-uniroot(function(a){
+    sk(a,K[i])-sk(a,K[i]-1)},
+    c(1,2))
+  root1[i]<-out$root
+}
+knitr::kable(rbind(K[1:12],root1[1:12]))
+knitr::kable(rbind(K[-(1:12)],root1[-(1:12)]))
+```
+
+## Question 11.5
+Write a function to solve the equation
+$$\frac{2\Gamma(\frac{k}{2})}{\sqrt{\pi(k-1)}\Gamma(\frac{k-1}{2})}\int_0^{c_{k-1}}\Bigg(1+\frac{u^2}{k-1}\Bigg)^{-\frac{k}{2}}du\\
+=\frac{2\Gamma(\frac{k+1}{2})}{\sqrt{\pi k}\Gamma(\frac{k}{2})}\int_0^{c_{k}}\Bigg(1+\frac{u^2}{k}\Bigg)^{-\frac{k+1}{2}}du$$  
+for a,where$$c_k=\sqrt{\frac{a^2k}{k+1-a^2}}.$$
+Compare the solutions with the points A(k) in Exercise 11.4.
+
+## Anwser
+Reduce $\frac{2}{\sqrt\pi}$ to get the follwing equation:
+$$\frac{\Gamma(\frac{k}{2})}{\sqrt{(k-1)}\Gamma(\frac{k-1}{2})}\int_0^{c_{k-1}}\Bigg(1+\frac{u^2}{k-1}\Bigg)^{-\frac{k}{2}}du\\
+=\frac{\Gamma(\frac{k+1}{2})}{\sqrt{ k}\Gamma(\frac{k}{2})}\int_0^{c_{k}}\Bigg(1+\frac{u^2}{k}\Bigg)^{-\frac{k+1}{2}}du$$ 
+
+First we write a function to compute the integration in the equation
+```{r}
+fck<-function(a,k){
+  ##compute integration
+  ck<-sqrt(a^2*k/(k+1-a^2))
+  v<-integrate(function(u){
+    (1+u^2/k)^(-(k+1)/2)},
+    lower = 0,upper = ck,
+    rel.tol = .Machine$double.eps^0.25)$value
+  return(exp(lgamma((k+1)/2)-lgamma(k/2))/sqrt(k)*v)
+}
+
+##write function to compute the right minus the left
+fun<-function(a,k){
+  ##a is a numeric vector
+  m<-length(a)
+  x<-1:m
+  for(i in 1:m)
+    x[i]<-fck(a[i],k)-fck(a[i],k-1)
+  return(x)
+}
+
+K<-s.root<-c(4 : 25,100, 500, 1000)
+a<-seq(0,5,0.01)
+plot(a,fun(a,100),lty=1,type="l",xlim=c(0,5))
+lines(a,fun(a,500),lty=2,col="blue",xlim=c(0,5))
+lines(a,fun(a,1000),lty=3,col="red",xlim=c(0,5))
+abline(h=0)
+legend("topright", legend=c("k=100", "k=500", "k=1000"), lty=1:3)
+```
+
+
+We can get a appropriate interval $(1,2)$ contained root value.
+
+```{r}
+root2<-numeric(length(K))
+for(i in 1:length(K)){
+  k<-K[i]
+  out<-uniroot(function(a){
+    fck(a,k)-fck(a,k-1)},
+    c(1,2))
+  root2[i]<-out$root
+}
+knitr::kable(rbind(K[1:12],root2[1:12],root1[1:12]))
+knitr::kable(rbind(K[-(1:12)],root2[-(1:12)],root1[-(1:12)]))
+#root1 are the roots of ex 11.4;root2 are the roots of ex 11.5
+```
+
+The  solutions of this question are the same as the points A(k) in Exercise 11.4 
+
+## Question 
+Suppose $T_1, . . . , T_n$ are i.i.d. samples drawn from the
+exponential distribution with expectation $\lambda$. Those values
+greater than τ are not observed due to right censorship, so that
+the observed values are $Y_i = T_iI(T_i \le \tau ) + \tau I(Ti > \tau ),i = 1, . . . , n.$ Suppose $\tau = 1$ and the observed $Y_i$ values are as
+follows:
+$$0.54, 0.48, 0.33, 0.43, 1.00, 1.00, 0.91, 1.00, 0.21, 0.85$$
+Use the E-M algorithm to estimate $\lambda$, compare your result with
+the observed data MLE (note: $Y_i$ follows a mixture
+distribution)
+
+## Anwser
+Rearrange the sample $Y_i$ putting 1 at the end as follows :
+$$0.54, 0.48, 0.33, 0.43, 0.91, 0.21, 0.85,1.00, 1.00,1.00$$
+We can conduct that $T_i=Y_i,i=1,...,7;Y_j=1.00,j=8,9,10$
+
+The density  is $$f(x)=\lambda e^{-\lambda x},x>0.$$
+ $$P(T>1)= e^{-\lambda }.$$
+Suppose $y_i,i=1,...,10$ are observed values.
+
+**Observed data likelihood:**
+$$L(\lambda|y_1,...,y_{10})=\prod_{i=1}^{7}f(y_i)\cdot\prod_{j=8}^{10}P(T_j>1)\\=\lambda^{-7}\cdot exp\{-\lambda^{-1}\cdot(\sum_{i=1}^{7}y_i+3)\}$$
+$$l(\lambda|y_1,...,y_{10})=-7log\lambda-\lambda^{-1}\cdot(\sum_{i=1}^{7}y_i+3)$$
+
+From $\frac{\partial l}{\partial \lambda}=0$,we can get **the observed data MLE** :
+$$\lambda_0=\frac{\sum_{i=1}^{7}y_i+3}{7}$$
+
+
+**Complete data likelihood:**
+$$l(\lambda;y_1,...,y_{7},T_8,T_9,T_{10})=-10log\lambda-\lambda^{-1}\cdot(\sum_{i=1}^{7}y_i+\sum_{j=8}^{10}T_j)$$
+**Kth E-step:**
+Initiate $\lambda$ with $\lambda_k$,then caculate 
+
+$$l_k(\lambda;y_1,...,y_{10})=E_{\lambda_k}[l(\lambda;y_1,...,y_{7},T_8,T_9,T_{10}|y_1,...,y_{7},T_j\ge1,j=8,9,10)]
+\\=-10log\lambda-\lambda^{-1}\cdot(\sum_{i=1}^{7}y_i+\sum_{j=8}^{10}E_{\lambda_k}[T_j|T_j\ge1])
+\\=-10log\lambda-\lambda^{-1}\cdot(\sum_{i=1}^{7}y_i+3(\lambda_k+1))
+$$
+
+where$$E_{\lambda}[T_j|T_j\ge1]=\frac{\int_1^\infty \lambda xe^{-\lambda x}dx}{P(T>1)}
+\\=\frac{\int_1^\infty \lambda xe^{-\lambda x}dx}{e^{-\lambda}}
+\\=\frac{(\lambda+1)e^{-\lambda}}{e^{-\lambda}}
+\\=\lambda+1$$
+**Kth M-step:**maximize $l_k(\lambda;y_1,...,y_{10})$,from $\frac{\partial l_k}{\partial \lambda}=0$,we can get :
+$$\lambda_{k+1}=\frac{\sum_{i=1}^{7}y_i+3(\lambda_k+1)}{10}$$
+
+The sequence $\{\lambda_k\}$ has  convergence.
+
+$$\lambda=\frac{\sum_{i=1}^{7}y_i+3(\lambda+1)}{10}\Rightarrow\lambda
+=\frac{\sum_{i=1}^{7}y_i+3}{7}$$
+
+The convergence of $\{\lambda_k\}$ is $\frac{\sum_{i=1}^{7}y_i+3}{7}$.
+
+**The EM estimator is exactly the observed data MLE!**
+
+Then implement EM algorithm
+
+```{r,eval=FALSE}
+library(nloptr)
+y<-c(0.54, 0.48, 0.33, 0.43, 0.91, 0.21, 0.85,1.00, 1.00,1.00)
+
+eval.lam<-function(lam,lam0,data=y){
+  c<-10*log(lam)+(sum(data[1:7])+3*lam0+3)/lam
+  return(c)
+}
+
+N<-10000
+l0<-as.vector(0.8)##initial est. for lambdas
+tol<-.Machine$double.eps^0.5
+opts = list("algorithm"="NLOPT_LN_COBYLA",
+             "xtol_rel"=tol)
+d=1
+j=1
+while(abs(d)>tol){
+  out<-nloptr(x0=0.8,
+              eval_f=eval.lam,
+              lb=0,ub=10,
+              opts = opts,
+              lam0=l0[j],data=y)
+  d<-l0[j]-out$solution
+  l0<-c(l0,out$solution)
+  j<-j+1
+}
+print(l0)#lambdas
+k<-length(l0)
+lam.EM<-(sum(y[1:7])+3)/7
+knitr::kable(cbind(k,l0[k],lam.EM),col.names = c("iteration times","test result","theoretical values"))
+```
+
+
+From the chart,the iteration times is 15;and the test result of lambda is $0.9642857$,which is equal to the theoretical lambda $0.9642857$. 
+
+
+
+## Question 1
+Why are the following two invocations of lapply() equivalent?
+
+$trims <- c(0, 0.1, 0.2, 0.5)\\x <- rcauchy(100)\\lapply(trims, function(trim) mean(x, trim = trim))\\lapply(trims, mean, x = x)$
+
+## Anwser
+```{r}
+set.seed(17)
+trims <- c(0, 0.1, 0.2, 0.5)
+x <- rcauchy(100)
+unlist(lapply(trims, function(trim) mean(x, trim = trim)))
+unlist(lapply(trims, mean, x = x))
+```
+
+From the result of code,they are the same.
+
+This is because the pieces of x are always supplied as the first argument to f and trims are supplied as the second argument "trim" to f.
+
+## Question 2
+For each model in the previous two exercises, extract $R^2$ using the function below.
+```{r}
+rsq <- function(mod) summary(mod)$r.squared
+```
+
+## Anwser
+In exercise 3,we have:
+```{r}
+attach(mtcars)
+
+formulas <- list(
+  mpg ~ disp,
+  mpg ~ I(1 / disp),
+  mpg ~ disp + wt,
+  mpg ~ I(1 / disp) + wt
+)
+
+#method 1 for excercise 3
+l3=lapply(formulas, function(x) lm(formula = x, data = mtcars))
+rsq3.1=lapply(l3,rsq)
+unlist(rsq3.1)
+#method 2 for excercise 3
+rsq3.2<-lapply(formulas, function(x){
+  mod<-lm(formula = x, data = mtcars)
+  rsq(mod)}
+  )
+unlist(rsq3.2)
+
+
+bootstraps <- lapply(1:10, function(i) {
+  rows <- sample(1:nrow(mtcars), rep = TRUE)
+  mtcars[rows, ]
+})
+#method 1 for excercise 4
+l4<-lapply(bootstraps, function(x) lm(formula =mpg ~ disp, data = x))
+rsq4.1=lapply(l4,rsq)#method 1 for excercise 4
+unlist(rsq4.1)
+
+#method 2 for excercise 4
+rsq4.2<-lapply(bootstraps, function(x){
+  l<-lm(formula =mpg ~ disp, data = x)
+  rsq(l)
+})
+unlist(rsq4.2)
+
+```
+
+## Question 3
+Use vapply() to:
+a) Compute the standard deviation of every column in a numeric data frame.
+b) Compute the standard deviation of every numeric column
+in a mixed data frame. (Hint: you’ll need to use vapply() twice.)
+
+## Anwser
+```{r}
+#(a)Compute sd of every column in a numeric data frame
+unlist(lapply(mtcars,class))
+#mtcars is a numeric data frame,so we take it as example.
+vapply(mtcars,sd,numeric(1))
+
+#(b)Compute sd of every numeric column in a mixed data frame
+attach(CO2)#Carbon Dioxide Uptake in Grass Plants;CO2 is a mixed data frame
+idx<-vapply(CO2,is.numeric,logical(1))
+vapply(CO2[idx],sd,numeric(1))
+```
+
+## Question 4
+Implement mcsapply(), a multicore version of sapply(). Can
+you implement mcvapply(), a parallel version of vapply()?
+Why or why not?
+
+## Anwser
+**Consider replce lapply() in mclapply() with sapply()  in R**
+```{r,eval=FALSE}
+library(parallel)
+
+sapply <- function (X, FUN, ..., simplify = TRUE, USE.NAMES = TRUE) {
+    FUN <- match.fun(FUN)
+    answer <- lapply(X = X, FUN = FUN, ...)
+    if (USE.NAMES && is.character(X) && is.null(names(answer))) 
+        names(answer) <- X
+    if (!isFALSE(simplify) && length(answer)) 
+        simplify2array(answer, higher = (simplify == "array"))
+    else answer
+}
+
+
+mcsapply <- function (X, FUN, ..., simplify = TRUE, USE.NAMES = TRUE) {
+  FUN <- match.fun(FUN)
+  answer <- mclapply(X = X, FUN = FUN, ...)
+  if (USE.NAMES && is.character(X) && is.null(names(answer))) 
+    names(answer) <- X
+  if (!isFALSE(simplify) && length(answer)) 
+    simplify2array(answer, higher = (simplify == "array"))
+  else answer
+}
+
+
+boot_df <- function(x) x[sample(nrow(x), rep = T), ]
+rsquared <- function(mod) summary(mod)$r.square
+boot_lm <- function(i) {
+  dat <- boot_df(mtcars)
+  rsquared(lm(mpg ~ wt + disp, data = dat))
+}
+n <- 1e4
+system.time(sapply(1:n, boot_lm))
+system.time(mcsapply(1:n, boot_lm,mc.cores=1))
+
+```
+
+I cannot implement mcvapply(), a parallel version of vapply() because  the FUN.VALUE can't be an environment value. 
+
+## Homwork 11
+
+## Question 
+Write an Rcpp function for Exercise 9.8:
+
+Consider the bivariate density
+$$f(x, y) \varpropto {n\choose x}y^{x+a−1}(1 − y)^
+{n−x+b−1}, x = 0, 1, . . . , n, 0 ≤ y ≤ 1.$$
+It can be shown  that for fixed a, b, n, the conditional distributions are Binomial(n, y) and Beta(x + a, n − x + b). Use the Gibbs sampler to
+generate a chain with target joint density f(x, y).
+
+1. Compare the corresponding generated random numbers with
+pure R language using the function “qqplot”.
+
+2. Campare the computation time of the two functions with the
+function “microbenchmark”.
+
+3. Comments your results.
+
+
+Produce the corresponding generated random numbers with
+pure R language using the function “qqplot”.
+
+**Pure R function:**
+```{r}
+gibbsR<- function(N,n=9,a=2,b=3) {
+  mat <- matrix(nrow = N, ncol = 2)
+  x <-5; y <- 0.5
+  for (i in 1:N) {
+      x <- rbinom(1, size = n, prob=y)
+      y <- rbeta(1, x+a, n-x+b)
+      mat[i, ] <- c(x, y)
+  }
+  mat
+}
+
+```
+
+
+
+**Rcpp function :**
+
+```{r}
+library(Rcpp)
+cppFunction('
+NumericMatrix gibbs_C(int N){
+  NumericMatrix mat(N, 2);
+  int x0=5;
+  double y0=0.5;
+  int n=9;
+  int a=2;
+  int b=3;
+  for (int i=0; i<N;i++) {
+    int x = rbinom(1, n, y0)[0];
+    mat(i,0)=x;
+    x0=x;
+    double y = rbeta(1, x0+a, n-x0+b)[0];
+    mat(i,1)=y;
+    y0=y;
+  }
+  return(mat);
+}')
+```
+
+Generate two random numbers with Rcpp function and pure R language.
+```{r}
+options(warn = -1)
+set.seed(19)
+x1<-gibbsR(5000)##random numbers with R
+x2<-gibbs_C(5000)##random numbers with Rcpp
+```
+
+
+**compare two marginal distributions**:
+```{r}
+xR<-x1[,1]
+xC<-x2[,1]
+yR<-x1[,2]
+yC<-x2[,2]
+par(mfrow=c(1,2))
+qqplot(xR[-(1:1000)],xC[-(1:1000)])
+abline(0,1,col='red',lwd=2)
+qqplot(yR[-(1:1000)],yC[-(1:1000)])
+abline(0,1,col='red',lwd=2)
+
+```
+
+From the plot, it appears that two marginal distributions of one random numbers are in approximate agreement with the other.
+
+
+
+```{r}
+library(microbenchmark)
+ts<-microbenchmark(gibR=gibbsR(5000),gibC=gibbs_C(5000))
+summary(ts)[,c(1,3,5,6)]
+```
+
+We get much faster using Rcpp than pure R language.

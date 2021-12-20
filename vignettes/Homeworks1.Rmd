@@ -1,0 +1,708 @@
+---
+title: "Homeworks1"
+author: "Liu Dingding"
+date: "2021/12/17"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Homeworks1}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+## Question
+Use knitr to produce at least 3 examples(texts,figures,tables).
+
+## Answer
+
+读取1920年代汽车速度对刹车距离的影响,打印前10组数据，并将两者的部分统计量以表格形式输出
+
+```{r }
+df<-cars
+print(df[1:10,])
+knitr::kable(summary(df))
+```
+绘制速度与刹车距离的散点图,并用最小二乘法线性拟合
+```{r }
+x=df[,"speed"]
+y=df[,"dist"]
+plot(x,y,xlab="speed",ylab="distance",xlim=c(0,max(df$speed)+1),ylim=c(0,max(df$dist)+1),'p')
+model<-lm(y~x,data=df)
+abline(model)
+```
+
+
+## Question
+Exercises 3.9,3.11, 3.20.
+
+## Answer
+3.9
+
+写一个函数生成随机变量，服从密度函数：$$f_e=\frac{3}{4}(1-x^2),|x|\le1$$
+
+```{r}
+fe<-function(){
+  u<-runif(3,-1,1)#生成服从均匀分布U(-1,1)的三个随机数
+  uabs=abs(u)#绝对值化
+  indx<-which(uabs==max(uabs))#找绝对值化后最大值的下标
+  u2=u[-indx]#去掉绝对值最大的数
+  u2[2]#输出需要的随机数
+}
+```
+
+构造一个样本量为1000的大模拟随机样本的密度估计的直方图:
+```{r}
+library(MASS)
+x<-1:1000
+for(i in 1:1000){
+ x[i]<-fe() 
+}
+hist(x,prob=TRUE,breaks=20,main=expression(f(x)==3/4*(1-x^2)))
+x1<-seq(-1,1,.01)
+lines(x1,col="red",3/4*(1-x1^2))
+```
+
+从直方图和密度图可以看出，经验分布和理论分布较吻合.
+
+
+
+3.11
+
+生成1000个服从正态位置混合变量的随机样本，混合变量分别服从$N(0,1)$和$N(3,1)$，混合密度为$p_1,p_2=1-p_1$
+
+当$p_1=0.75$时，$p_2=0.25$，对应的叠加密度曲线直方图如下：
+```{r}
+ppnorm<-function(p1,p2){
+  ber<-sample(0:1,size=1000,replace=TRUE,prob=c(p2,p1))
+  x11<-1:1000
+  for(i in 1:1000){
+    x11[i]<-ber[i]*rnorm(1,0,1)+(1-ber[i])*rnorm(1,3,1)
+  }
+  hist(x11,prob=TRUE,main=expression(f(x)==p1*N(0,1)+p2*N(3,1)))
+  y<-seq(floor(min(x11)),ceiling(max(x11)),0.01)
+  lines(y,p1*dnorm(y,0,1)+p2*dnorm(y,3,1),col="red")
+}
+ppnorm(.75,.25)
+```
+
+当$p_1=0.75$时，可以看到不明显双峰.
+
+下面对不同的$p_1$进行观测：
+```{r}
+par(mfrow=c(1,3))
+for(i in 1:9){
+  p<-i/10
+  ppnorm(p,1-p)
+}
+```
+
+通过图像可以看出，$p_1$在[0.25,0.75]范围可以观测到双峰,此为大致范围，并不精确
+
+
+
+3.20
+
+模拟混合$Poisson-Gamma$过程,$Gamma$分布的参数固定为$alpha=1,rate=1$：
+
+```{r}
+pogam<-function(lmd,alpha=1,rate=1){#模拟混合分布算法
+  t0<-10
+  tn<-rexp(100,lmd)
+  sn<-cumsum(tn)
+  n<-min(which(sn>t0))
+  xt<-rgamma(n,1,1)
+  sum(xt)
+}
+lmd<-2#给参数lambda赋值
+pg<-1:1000
+for(i in 1:1000){
+  pg[i]<-pogam(lmd,alpha,rate)
+}#生成1000个混合分布的随机样本
+```
+
+对于理论均值和方差，有$E[Y_1]=D[Y_1]=1,E[Y_1^2]=2$，则$E[X(t)]=\lambda*10*E[Y_1]=10\lambda,Var[X(t)]=\lambda*10*E[Y_1^2]=20\lambda$，
+打印$\lambda=1,2,3,4,5$时样本均值、样本方差和理论均值、理论方差，进行比较：
+```{r}
+tab1<-matrix(0,3,5)
+tab2<-matrix(0,3,5)
+row1<-c('λ','样本均值','理论均值')
+row2<-c('λ','样本方差','理论方差')
+dimnames(tab1)<-list(row1,c('','','','',''))
+dimnames(tab2)<-list(row2,c('','','','',''))
+for(i in 1:5){
+  lmd<-i
+  p<-pogam(lmd)
+  m_p<-mean(p)#样本均值
+  s_p<-var(p)#样本方差
+  m<-10*lmd
+  s<-20*lmd
+  tab1[,i]<-c(i,m_p,m)
+  tab2[,i]<-c(i,s_p,s)
+}
+
+knitr::kable(tab1)
+knitr::kable(tab2)
+```
+
+从两个表格可以看出，模拟的样本的均值、方差与理论的均值方差相近.
+
+
+## Question
+
+Exersice 5.4,5.9,5.13and5.14
+
+
+## Anwser
+
+5.4:
+
+写一个函数，使用蒙特卡洛积分方法估计$Beta(3,3)$的$cdf$：
+
+```{r}
+beta_cdf<-function(x,m=1000){
+  u<-runif(m)
+  cdf<-numeric(length(x))
+  for(i in 1:length(x)){
+    g<-u^2*x[i]^3*(1-u*x[i])^2
+    cdf[i]<-mean(g)/beta(3,3)
+  }
+  cdf
+}
+```
+
+得到在$x=0.1,0.2,...,0.9$处的估计值以及真实值，并进行比较：
+
+```{r}
+set.seed(1)
+x<-seq(0.1,0.9,length=9)
+CDF<-beta_cdf(x)
+beta_real<-pbeta(x,3,3)
+knitr::kable(round(rbind(x,CDF,beta_real),3))
+
+```
+
+从表格可以看出，估计值与真实值相差不大.
+
+5.9:
+
+对偶变量法写函数生成样本，使其服从分布密度函数$f(x)=\frac{x}{\sigma^2}e^{-x^2/(2\sigma^2)},x\ge0,\sigma>0$:
+
+```{r}
+MC.ray<-function(x,s,R=10000,antithetic=TRUE){
+  u<-runif(R/2)
+  if(!antithetic) v<-runif(R/2)
+  else v<-1-u
+  u<-c(u,v)
+  cdf<-numeric(length(x))
+  for(i in 1:length(x)){
+    g<-u*x[i]^2*exp(-(u*x[i])^2/(2*s^2))
+    cdf[i]<-mean(g)/s^2
+  }
+  cdf  
+  
+}
+```
+
+给定$\sigma=1$单一蒙特卡罗实验和对偶蒙特卡罗实验的估计值对比如下：
+
+```{r}
+x<-seq(.1,2.5,length=10)
+set.seed(2)
+MC1<-MC.ray(x,s=1,antithetic = FALSE)
+MC2<-MC.ray(x,s=1)
+knitr::kable(round(rbind(x,MC1,MC2),4))
+```
+
+对于给定$x=1.5$，分别用单一蒙特卡罗积分法和对偶变量法来模拟估计方差缩减量，并计算方差缩减量的百分比：
+
+```{r}
+m<-1000
+MC1<-MC2<-numeric(m)
+x<-1.5
+for(i in 1:m){
+  MC1[i]<-MC.ray(x,s=1,R=1000,antithetic = FALSE)
+  MC2[i]<-MC.ray(x,s=1,R=1000)
+}
+print(sd(MC1))
+print(sd(MC2))
+print((var(MC1)-var(MC2))/var(MC1))
+```
+
+在$x=1.5$处，对偶变量法得到30%左右的方差缩减量.
+
+5.13
+
+找到两个重要函数$f_1,f_2$接近$g(x)=\frac{x^2}{\sqrt{2\pi}}e^{-x^2/2},x>1$，其中$f_1(x)=2f(x),x>1,f(x)$为正态分布$N(1,1)$密度函数，$f_2(x)=e^{(1-x)},x>1$，为定义区间在$(1,+\infty)$指数分布：
+
+```{r}
+m<-10000
+theta.hat<-se<-numeric(2)
+g<-function(x){
+  x^2/sqrt(2*pi)*exp(-x^2/2)
+}
+f1<-function(x){2*dnorm(x,1,1)*(x>=1)}
+f2<-function(x){
+  exp(1-x)
+}
+x1<-abs(rnorm(m,0,1))+1
+x2<-rexp(m,1)+1
+fg1<-g(x1)/f1(x1)
+fg2<-g(x2)/f2(x2)
+theta.hat[1]<-mean(fg1)
+theta.hat[2]<-mean(fg2)
+se[1]<-sd(fg1)
+se[2]<-sd(fg2)
+rbind(theta.hat,se)#得到估计值和标准差
+```
+
+模拟结果显示，两个重要函数中$f_1$产生的方差更小.
+
+下面画出$g,f_1,f_2$的图像$figure(a)$以及比例$g/f_1,g/f_2$的图像$figure(b)$
+```{r}
+x<-seq(1,4,0.01)
+par(mfrow=c(1,2))
+#figue(a)
+plot(x,g(x),type="l",main="figure(a)",ylim=c(0,1),lwd=2)
+lines(x,f1(x),lty=2,lwd=2,col="red")
+lines(x,f2(x),lty=3,lwd=2,col="blue")
+legend("topright",legend=c("g",1:2),lty=1:3,lwd=2,inset=0.02)
+#figue(b)
+plot(x,g(x),type="l",main="figure(b)",ylim=c(0,2),lwd=2)
+lines(x,g(x)/f1(x),lty=2,lwd=2,col="red")
+lines(x,g(x)/f2(x),lty=3,lwd=2,col="blue")
+legend("topright",legend=c("g",1:2),lty=2:3,lwd=2,inset=0.02)
+
+```
+
+从图像可以看出，红色所代表的$g/f_1$波动更小，更趋近于一个常数，所以$f_1$产生的方差更小.
+
+5.14
+
+在5.13中，$f_1$的方差更小，根据它使用重要抽样方法得到$g(x)=\frac{x^2}{\sqrt{2\pi}}e^{-x^2/2},x>1$的蒙特卡罗估计为：
+
+```{r}
+print(theta.hat[1])
+```
+
+
+## Question 6.5
+
+Suppose a 95% symmetric t-interval is applied to estimate a mean, but the sample data are non-normal. Then the probability that the confidence interval covers the mean is not necessarily equal to 0.95.
+
+Use a Monte Carlo experiment
+to estimate the coverage probability of the t-interval for random samples of
+$\chi^2(2)$ data with sample size $n = 20$. 
+
+Compare your t-interval results with the
+simulation results in Example 6.4. 
+
+## Answer
+If $X_1,...,X_n$ is a random sample from a Normal distrbution $N(\mu,\sigma^2)$,$n\ge2$, $\overline{X}$ is the sample mean ,and $S^{2}$ is the sample variance,then $$U=\frac{\sqrt{n}(\overline{X}-\mu)}{S} \sim t(n-1) \tag{1}$$.
+
+A two sides $100(1-\alpha)\%$ CI is given by $$(\overline{X}-\frac{S}{\sqrt{n}}t_{\alpha/2}(n-1),\overline{X}+\frac{S}{\sqrt{n}}t_{\alpha/2}(n-1))$$
+
+Suppose that sampled population is $\chi^2(2)$,which has mean 2 and variance 4.We use the  $\chi^2(2)$samples to simulate.
+
+In this plce we have $\mu=2,\sigma=2,n=20,m=1000,and\alpha=0.05$:
+```{r}
+set.seed(1)
+n<-20
+I<-replicate(1000,expr={
+  x<-rchisq(n,df=2)
+  se<-sqrt(var(x))
+  UCL1<-mean(x)-se/sqrt(n)*qt(.975,df=n-1)#CI lower
+  UCL2<-mean(x)+se/sqrt(n)*qt(.975,df=n-1)#CI upper
+  (UCL2>2)*(UCL1<2)# mean 2 of chisq is in CI or not
+})
+sum(I)
+mean(I)
+
+```
+From the result,92.6% of the intervals contained the population mean.
+
+And in example 6.4,the coverage probability of the variance is 77.3%.
+
+we can conclude that the t-interval should be more robust to
+departures from normality than the interval for variance.
+
+
+## Question 6.A
+
+Use Monte Carlo simulation to investigate whether the empirical Type I error rate of the t-test is approximately equal to the nominal significance level
+α, when the sampled population is non-normal. The t-test is robust to mild
+departures from normality. Discuss the simulation results for the cases where
+the sampled population is $(i) \chi^2(1), (ii) Uniform(0,2), and (iii) Exponential(rate=1)$. In each case, test $H_0 : \mu = \mu_0 vs H_1 : \mu \ne \mu_0$, where $\mu_0$ is the
+mean of $\chi^2(1), Uniform(0,2), and Exponential(1)$, respectively.
+
+## Answer
+In this question,$\mu_0=1$,test $$H_0 : \mu =1 vs H_1 : \mu \ne 1$$
+
+Then the simulation is repeated for n = 20, 30, 50, 100, 500, and saved in
+p1.reject,p2.reject,p3.reject corresponding to the sampled population $ \chi^2(1),  Uniform(0,2), and  Exponential(rate=1)$
+
+```{r}
+set.seed(2)
+n<-c(10,20,30,50,100,500,1000)#a vector of sample sizes
+p1.hat<-p2.hat<-p3.hat<-numeric(length(n))#to store TYPE I ERROR for different n
+m<-10000#num. repl. each sim.
+for(i in 1:length(n)){
+  p3<-p2<-p1<-numeric(m)
+  se3<-se2<-se1<-numeric(m)
+  for(j in 1:m){
+    x1<-rchisq(n[i],df=1)
+    x2<-runif(n[i],0,2)
+    x3<-rexp(n[i],rate=1)
+    ttest1<-t.test(x1,alternative="two.sided",mu=1)
+    ttest2<-t.test(x2,alternative="two.sided",mu=1)
+    ttest3<-t.test(x3,alternative="two.sided",mu=1)
+    p1[j]<-ttest1$p.value
+    p2[j]<-ttest2$p.value
+    p3[j]<-ttest3$p.value
+  }
+  p1.hat[i]<-mean(p1<0.05)
+  p2.hat[i]<-mean(p2<0.05)
+  p3.hat[i]<-mean(p3<0.05)
+}
+se1<-sqrt(p1.hat*(1-p1.hat)/m)
+se2<-sqrt(p2.hat*(1-p2.hat)/m)
+se3<-sqrt(p3.hat*(1-p3.hat)/m)
+options(scipen=10)
+print(round(rbind(n,p1.hat,se1,p2.hat,se2,p3.hat,se3),7))
+```
+
+From the results,we can see the empirical Type I error rate of Uniform(0,2) is more  approximately equal to 0.05 than the other two distributions. The uniform is more mild
+departures from normality.
+
+## Question1 in class
+
+If we obtain the powers for two methods under a particular
+simulation setting with 10,000 experiments: say, 0.651 for one
+method and 0.676 for another method. We want to know if the
+powers are different at 0.05 level.
+
+## Anwser 
+we can't say the powers are different at 0.05 level.Different methods have different standard error.
+
+
+## Question2 in class
+What is the corresponding hypothesis test problem?
+
+## Anwser 
+
+相关性检验，常依据相关系数构造假设，相关系数是研究变量之间线性相关程度的量，用于说明两个变量之间是否存在相关关系，以及相关关系的紧密程度。常见的检验是对相关系数是否等于0作出假设(常见的有pearson相关系数、Spearman相关系数、kendal秩相关系数、线性回归模型的$\beta_1$)。
+
+## Question3 in class
+What test should we use? Z-test, two-sample t-test, paired-test or McNemar-test? Why?
+
+Please provide the least necessary information for hypothesis
+testing.
+
+## Anwser
+Z-test:一般用于大样本平均值差异性检验，或者已知前提两样本独立的正态分布且方差已知，用标准正态分布的理论来推断差异发生的概率，从而比较均值差异是否显著.
+
+the least necessary information for Z-test：大样本或者已知前提两样本独立的正态分布且方差已知
+
+two-sample t-test:检验两个正态分布的样本均值差异是否显著
+
+the least necessary information for two-sample t-test：两样本独立且服从正态分布，方差未知
+
+paired-test：研究对象的前后两次测量，两样本是1：1配对出现的，针对研究对象前后的两次测量差异是否显著
+
+the least necessary information for paired-test：两样本配对，服从正态分布或近似正态分布，均值比较时要求总体方差齐性.
+
+McNemar-test：即配对卡方检验，适用于二分类问题，用于某些2*2表格的配对样本，在比较两个二元分类算法时，用于比较两个模型的差异性，不能说明哪个模型更准确。
+
+the least necessary information for McNemar-test：待检验两组样本的观察值是二分类数据
+
+
+## Question 6.C
+
+Repeat Examples 6.8 and 6.10 for Mardia’s multivariate skewness test. If $X$ and $Y$ are $iid$, the multivariate population skewness $\beta_{1,d}$ is defined by Mardia as
+$$\beta_{1,d}=E[(X-\mu)^T\Sigma^{-1}(Y-\mu)^3]$$.
+Under normality, $\beta_{1,d}=0$. The multivariate skewness statistic is
+$$b_{1,d}=\frac{1}{n^2}\sum_{i,j=1}^{n}((X_i-\overline{X})^T\hat{\Sigma}^{-1}(X_j-\overline{X}))^3$$
+where $\hat{\Sigma}$ is the maximum likelihood estimator of covariance. Large values of
+$b_{1,d}$ are significant. The asymptotic distribution of $nb_{1,d}/6$ is chisquared with
+$d(d + 1)(d + 2)/6$ degrees of freedom.
+
+## Anwser
+检验水平固定为$\alpha=0.05$，$nb_{1,d}/6$ 的渐近分布是自由度为$d(d + 1)(d + 2)/6$的卡方分布，
+
+对$n=(20,30,50,100,500)$，先在极限分布下计算临界值向量cv.
+```{r}
+n<-c(20,30,50,100,500)#n是试验中样本量组成的向量
+d=3
+cv<-qchisq(.95,df=d*(d+1)*(d+2)/6)
+```
+
+接下来写一个函数来计算样本偏度统计量.
+```{r}
+library(MASS)
+sk<-function(x){
+  Sigma.hat<-(nrow(x)-1)*cov(x)/nrow(x)#协方差矩阵的极大似然估计
+  sigma.ni<-ginv(Sigma.hat)
+  x.new=x
+  for(i in 1:d){
+    x.new[,i]<-x[,i]-mean(x[,i])
+  }
+  y<-(x.new%*%sigma.ni%*%t(x.new))^3
+  nrow(x)*mean(y)/6
+}
+```
+
+
+在下面代码中，循环改变样本大小n，循环内对n进行模拟，检验决策（1或0）的均值储存在“p.reject”中
+```{r}
+m<-1e4
+set.seed(111)
+mean<-rep(0,d);sigma<-diag(d)#标准正态分布的均值和协方差
+p.reject<-numeric(length(n))
+for(i in 1:length(n)){
+     p.reject[i]<-mean(replicate(m,expr={
+       x<-mvrnorm(n[i],mean,sigma)#抽n[i]个向量样本,服从多元标准正态分布
+       as.integer(sk(x)>=cv)}))
+} 
+print(rbind(n,p.reject))
+```
+由模拟的结果可知当样本量$n\ge100$时，第一类错误率的估计值接近理论水平$\alpha=0.05$.
+
+接下来考虑偏度正态检验的功效:
+
+针对污染正态分布:$$(1-\epsilon)N(\mu_1,\Sigma_1)+\epsilon N(\mu_2,\Sigma_2)$$,
+其中$$\mu_1=\mu_2=(0,0,0)$$
+$$\Sigma_1=\begin{pmatrix}
+1&0&0\\
+0&1&0\\
+0&0&1\\
+\end{pmatrix}
+\Sigma_2=\begin{pmatrix}
+100&0&0\\
+0&100&0\\
+0&0&100\\
+\end{pmatrix}$$
+当$\epsilon=0,1$时分布时正态的，当$0<\epsilon<1$时是非正态的.
+
+对一系列$\epsilon$的备择假设估计其偏度估计检验的功效，并绘制偏度检验功效的功效曲线.
+
+显著水平$\alpha=0.05$，样本大小$n=30$
+
+```{r}
+set.seed(1)
+n<-30
+m<-2500
+epsilon<-c(seq(0,0.15,0.01),seq(0.15,1,0.05))
+N<-length(epsilon)
+pwr<-numeric((N))#储存不同epsilon对应的功效值
+mu2<-mu1<-c(0,0,0)
+s1<-diag(3)
+s2<-diag(3)*100
+for(i in 1:N){
+  e<-epsilon[i]
+  pwr[i]<-mean(replicate(m,expr={
+    r<-sample(c(0,1),size=n,replace=TRUE,prob=c(1-e,e))
+    x<-(1-r)*mvrnorm(1,mu1,s1)+ r*mvrnorm(n,mu2,s2)
+    as.integer(sk(x)>=cv)
+  }))
+}
+
+#plot power(pwr) vs epsilon
+plot(epsilon,pwr,type="b",xlab=bquote(epsilon),ylim=c(0,1))
+abline(h=0.05,lty=3)
+se<-sqrt(pwr*(1-pwr)/m)#add se
+lines(epsilon,pwr+se,lty=3)
+lines(epsilon,pwr-se,lty=3)
+epsilon[which(pwr==max(pwr))]#power最大值对应的epsilon
+```
+由经验功效曲线可以看出，当$0<\epsilon<1$时在$\epsilon=0.25$左右功效达到最大值，并且接近于1.
+
+
+## Question 7.7
+Refer to Exercise 7.6,The five-dimensional scores data have a 5 × 5 covariance matrix $\Sigma$,
+with positive eigenvalues $\lambda_1 > ··· > \lambda_5$. In principal components analysis,$$\theta=\frac{\lambda_1}{\sum_{j=1}^{5}\lambda_j}$$
+measures the proportion of variance explained by the first principal component.Let $\hat{\lambda_1 }> ··· > \hat{\lambda_5}$ be the eigenvalues of $\hat{\Sigma}$, where $\hat{\Sigma}$ is the MLE of $\Sigma$.
+Compute the sample estimate $$\hat{\theta}=\frac{\hat{\lambda_1}}{\sum_{j=1}^{5}\hat{\lambda_j}}$$
+of $\theta$. Use bootstrap to estimate the bias and standard error of $\hat{\theta}$.
+
+## Anwser 7.7
+```{r}
+set.seed(1)
+library(bootstrap)#for the score data
+library(MASS)
+library(boot)
+#write a function to compute the theta
+theta.boot<-function(score,i){
+  x<-score[i,]
+  n<-nrow(score)#sample size
+  #cov(x)-unbised estimator,need to *(n-1)/n to get MLE
+  lmd<-eigen((n-1)*cov(x)/n)$values#vector of values
+  lmd[1]/sum(lmd)#return estimator of theta according to score
+}
+
+#bootstrap
+B<-1000#number of replicates
+n<-nrow(scor)#sample size
+lmd.hat<-eigen((n-1)*cov(scor)/n)$values
+theta.hat<-lmd.hat[1]/sum(lmd.hat)
+R<-numeric(B)
+result<-boot(data=scor,statistic=theta.boot,R=1000)
+theta_b<-result$t#extract the replicates in $t
+bias_b<-mean(theta_b)-theta.hat# Bootstrap Estimation of Bias
+se_b<-sd(theta_b)#Bootstrap Estimation of Standard Error
+print(cbind(theta.hat,theta_boots=mean(theta_b),bias_boots=bias_b,se_boots=se_b))
+``` 
+The estimator of the bias of $\hat{\theta}$ is $0.0001904229$ using bootstrap.
+
+The estimator of standard error of $\hat{\theta}$ is $0.04698638$ using bootstrap.
+
+## Question 7.8
+Refer to Exercise 7.7. Obtain the jackknife estimates of bias and standard
+error of $\hat{\theta}$.
+
+## Anwser 7.8
+```{r}
+#JACKknife
+set.seed(2)
+theta.jack<-numeric(n)#store JACKknife estimation of theta
+for(i in 1:n){
+  x<-scor[-i,]#delet the ith data to get a set of JACKKNIFE samples
+  lmd.J<-eigen((n-1)*cov(x)/n)$values#values of MLE of Sigma 
+  theta.jack[i]<-lmd.J[1]/sum(lmd.J)
+}
+theta_j<-mean(theta.jack)
+bias_j<-(n-1)*(mean(theta.jack)-theta.hat)
+se_j<-sqrt((n-1)*mean((theta.jack-mean(theta.jack))^2))
+print(cbind(theta.hat,theta_j,bias_j,se_j))
+```
+The estimator of the bias of $\hat{\theta}$ is $0.001069139$ using Jackknife.
+
+The estimator of standard error of $\hat{\theta}$ is $0.04955231$ using Jackknife.
+
+## Question 7.9
+Refer to Exercise 7.7. Compute 95% percentile and BCa confidence intervals
+for $\hat{\theta}$.
+
+## Anwser 7.9
+In 7.7,we use BOOTSTRAP.Function 'boot' and 'boot.ci' in  package "boot" can  help us to obtain the 95% percentile and BCa bootstrap confidence intervals.
+```{r}
+#result is by bootstrap in 7.7
+print(result)
+print(boot.ci( result,conf = 0.95,type=c("perc","bca")))
+```
+
+From the result of boot.ci,we can see that:
+
+95%percentile bootstrap confidence interval is $(0.5210,  0.7065)$.
+
+95% BCa confidence interval is $(0.5186,  0.7034)$.
+
+## Question 7.B
+7.A :Conduct a Monte Carlo study to estimate the coverage probabilities of the
+standard normal bootstrap confidence interval, the basic bootstrap confidence
+interval, and the percentile confidence interval. Sample from a normal population and check the empirical coverage rates for the sample mean. Find
+the proportion of times that the confidence intervals miss on the left, and the
+porportion of times that the confidence intervals miss on the right.
+
+7.B :Repeat Project 7.A for the sample skewness statistic. Compare the coverage
+rates for normal populations (skewness 0) and $\chi^2(5)$ distributions (positive skewness).
+
+## Anwser 7.B
+First,couduct a Mont Carlo study:
+
+Suppose that $X ∼ F_X$ is the random variable of interest and that $\theta$ is the target parameter to be estimated.
+
+1.For each replicate, indexed j = 1,...,m:
+
+(a) Generate the $j^{th}$ random sample, $X^{(j)}_1 ,...,X^{(j)}_n $.
+
+(b) Compute the standard normal bootstrap confidence interval, the basic bootstrap confidence
+interval, and the percentile confidence interval $N_j,B_j,P_j$ for the $j^{th}$ sample.
+
+(c) Compute $n_j = I(\theta ∈ N_j ),b_j = I(\theta ∈ B_j ),p_j = I(\theta ∈ P_j )$ for the $j^{th}$ sample.
+
+2.Compute the the coverage probabilities$\overline{n}=\frac{1}{m}\Sigma_{j=1}^{m}n_j,\overline{b}=\frac{1}{m}\Sigma_{j=1}^{m}b_j,\overline{p}=\frac{1}{m}\Sigma_{j=1}^{m}p_j$ .
+
+Next,we realize the project for the sample skewness statistic.
+```{r}
+m=500#Mont carlo study times
+n=100#sample size
+sk.chi<-sqrt(8/5)#skweness of Chi-square distribution with df=5
+sk<-function(x){
+  #compute the sample skewness coeff
+  xbar<-mean(x)
+  m3<-mean((x-xbar)^3)
+  m2<-mean((x-xbar)^2)
+  return(m3/m2^1.5)
+}
+skew.boot<-function(data,i){
+  #function to compute the statistic
+  x<-data[i,]
+  sk(x)
+}
+x.cp<-y.cp<-numeric(m)#store decision values (0or1) for theta is in CI or not. 
+norm_prob<-numeric(9)#store coverage prob and proportion of times of miss on the two sides about N(0,1)
+chis_prob<-numeric(9)#store coverage prob and proportion of times of miss on the two sides about N(0,1)
+set.seed(3)
+x.cp<-replicate(500,expr={
+  x<-rnorm(n,0,1)
+  x<-matrix(x)
+  boot.x<-boot(x,statistic = skew.boot,R=1000)
+  ci=boot.ci(boot.x,conf = 0.95,type=c("norm","basic","perc"))
+  x.p<-(ci$perc[4]<0)*(0<ci$perc[5])#theta=0 is in perc CI or not
+  x.b<-(ci$basic[4]<0)*(0<ci$basic[5])#0 is basic CI or not
+  x.n<-(ci$norm[2]<0)*(0<ci$norm[3])#0 is in normal CI or not
+  x.pleft<-(ci$perc[4]>=0)*1;x.pright<-(ci$perc[5]<=0)*1
+  x.bleft<-(ci$basic[4]>=0)*1;x.bright<-(ci$basic[5]<=0)*1
+  x.nleft<-(ci$normal[2]>=0)*1;x.nright<-(ci$normal[3]<=0)*1
+  list(x.n,x.b,x.p,x.nleft,x.bleft,x.pleft,x.nright,x.bright,x.pright)
+}) 
+for(i in 1:9){
+  norm_prob[i]<-mean(as.numeric(x.cp[i,]))
+}
+y.cp<-replicate(500,expr={
+  y<-rchisq(n,df=5)
+  y<-matrix(y)
+  boot.y<-boot(y,statistic = skew.boot,R=2000)
+  ci=boot.ci(boot.y,conf = 0.95,type=c("norm","basic","perc"))
+  y.b<-(ci$basic[4]<sk.chi)*(sk.chi<ci$basic[5])#theta= is basic CI or not
+  y.n<-(ci$norm[2]<sk.chi)*(sk.chi<ci$norm[3])#0 is in normal CI or not
+  y.p<-(ci$perc[4]<sk.chi)*(sk.chi<ci$perc[5])#0 is in perc CI or not
+  y.pleft<-(ci$perc[4]>=sk.chi)*1;y.pright<-(ci$perc[5]<=sk.chi)*1
+  y.bleft<-(ci$basic[4]>=sk.chi)*1;y.bright<-(ci$basic[5]<=sk.chi)*1
+  y.nleft<-(ci$normal[2]>=sk.chi)*1;y.nright<-(ci$normal[3]<=sk.chi)*1
+  list(y.n,y.b,y.p,y.nleft,y.bleft,y.pleft,y.nright,y.bright,y.pright)
+}) 
+for(i in 1:9){
+  chis_prob[i]<-mean(as.numeric(y.cp[i,]))
+}
+coverprob=matrix(c(norm_prob[1:3],chis_prob[1:3]),byrow=TRUE,nrow=2)
+norm_miss=matrix(norm_prob[4:9],byrow=TRUE,nrow=2)
+chis_miss=matrix(chis_prob[4:9],byrow=TRUE,nrow=2)
+row.names(coverprob)<-c("normal_distrib","chis_distrib")
+row.names(norm_miss)<-row.names(chis_miss)<-c("left_miss_proportion","right_miss_proportion")
+colnames(coverprob)<-colnames(norm_miss)<-colnames(chis_miss)<-c("norm CI","basic CI","perc CI")
+```
+Print the coverage probabilities of the
+standard normal bootstrap confidence interval, the basic bootstrap confidence
+interval, and the percentile confidence interval of distribution N(0,1) and chis-distribution with df=5.
+```{r}
+print(coverprob)#coverage probability of three kinds CI for two different distributions
+```
+From the above result,we can see that :
+
+(1)all coverage prob is lower than confidence level(=0.95).But the coverage probability of normal distrubution(about 0.93) is more close to 0.95 than the coverage probability of chis-distrubution(about 0.85) about three kinds boostrap CI.
+
+(2)Coverage prob of the three kinds CI of normal distribution is higer than chis-distribution.
+
+Then we find the proportion of times that the confidence intervals miss on the left, and the
+porportion of times that the confidence intervals miss on the right as below:
+
+```{r}
+print(norm_miss)#proportion of times of miss on the two sides about N(0,1)
+print(chis_miss)#proportion of times of miss on the two sides about chis-distribution with df=5
+```
+
+From the result,for normal distribution,we can see that the proportion of times that the confidence intervals miss on the left is close to that on the right.
+
+But,for chis-distribution,the proportion of times that the confidence intervals miss on the right is obviously larger than that on the left.
+
+And considering the fact that the skewness of normal distribution is 0 and the skewness of chis-distribution is positive.So the result is valid.And the Mont carlo stduy we conduct is valid.
+

@@ -1,0 +1,117 @@
+## -----------------------------------------------------------------------------
+bootunif.sample<-function(x){
+  if(!is.numeric(x))
+    stop("data must be a numeric vector!\n")
+  if(!(is.atomic(x)||is.list(x)))
+    stop("data must be a numeric vector!\n")
+  n<-length(x)
+  x0<-sort(x)
+  data<-sapply(1:(n-1), function(i){
+    runif(1,x0[i],x0[i+1])
+  })
+  data1<-c(x0[1],data,x0[n])
+  return(data1)
+}
+
+## -----------------------------------------------------------------------------
+bootunif<-function(data,statistic,R){
+  if(!is.numeric(data))
+    stop("data must be a numeric vector!\n")
+  if(!(is.atomic(data)||is.list(data)))
+    stop("data must be a numeric vector!\n")
+  data0<-replicate(R,expr = {
+    list(bootunif.sample(data))
+  })
+  res0<-lapply(list(data), as.function(statistic))
+  res<-lapply(data0, as.function(statistic))
+  t0<-unlist(res0)
+  t<-unlist(res)
+  mu=mean(t)
+  b=mu-t0
+  s=sd(t)
+  out<-matrix(c(t0,b,s),nrow = 1,dimnames = list("values",c("original","bias","std.error")))
+  t=matrix(t)
+  return(list(t0=t0,t=t,bootunif.Statistics=out))
+}
+
+## ----eval=FALSE---------------------------------------------------------------
+#  library(boot)
+#  x<-rnorm(19,2,3)
+#  y<-bootunif(x,mean,1000)
+#  meanx<-function(x,i){
+#    x<-x[i]
+#    mean(x)
+#  }
+#  z<-boot(x,meanx,1000)
+#  y$bootunif.Statistics
+#  z
+
+## -----------------------------------------------------------------------------
+fh.hat<-function(x,h,data){
+  if(!is.numeric(data))
+    stop("data must be a numeric vector!\n")
+  if(!(is.atomic(data)||is.list(data)))
+    stop("data must be a numeric vector!\n")
+  f<-sapply(1:length(x), function(i)(1/h)*mean(dnorm((x[i]-data)/h)))
+  return(f)
+}
+
+## -----------------------------------------------------------------------------
+CVh<-function(h,x){
+  if(!(length(h)==2))
+    stop("h must be a vector with length 2 as initial intervals!")
+  if(!is.numeric(x))
+    stop("data must be a numeric vector!\n")
+  if(!(is.atomic(x)||is.list(x)))
+    stop("data must be a numeric vector!\n")
+  hs<-seq(h[1],h[2],by=0.1)
+  wid=0.1
+  cv<-sapply(hs,function(h){
+    e<-sapply(1:length(x), function(i){
+      (x[i]-fh.hat(x[i],h,x[-i]))^2
+    })
+    mean(e)
+  })
+  n<-length(hs)
+  pos<-which.min(cv)
+  while((pos==1)||(pos==n)||(wid>0.005)){
+    hs<-seq(hs[pos]-wid,hs[pos]+wid,by=wid/10)
+    if(!((pos==1)||(pos==n)))wid=wid/10
+    n<-length(hs)
+    cv<-sapply(hs,function(h){
+      e<-sapply(1:length(x), function(i){
+        (x[i]-fh.hat(x[i],h,x[-i]))^2
+      })
+      mean(e)
+    })
+    pos<-which.min(cv)
+  }
+  v<-hs[pos]
+  return(v)
+}
+
+## -----------------------------------------------------------------------------
+y<-sample(0:1,size=1000,replace=TRUE,prob = c(0.7,0.3))
+data<-y*rnorm(1000,0,1)+(1-y)*rnorm(1000,1,0.3)
+h<-c(0.005,0.25)
+CVh(h,data)
+
+## ----eval=FALSE---------------------------------------------------------------
+#  NumericMatrix gibbs_C(int N){
+#    NumericMatrix mat(N, 2);
+#    int x0=5;
+#    double y0=0.5;
+#    int n=9;
+#    int a=2;
+#    int b=3;
+#    for (int i=0; i<N;i++) {
+#      int x = rbinom(1, n, y0)[0];
+#      mat(i,0)=x;
+#      x0=x;
+#      double y = rbeta(1, x0+a, n-x0+b)[0];
+#      mat(i,1)=y;
+#      y0=y;
+#    }
+#    return(mat);
+#  }
+
