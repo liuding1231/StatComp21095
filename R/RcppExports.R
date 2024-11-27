@@ -10,6 +10,8 @@
 #' x<-gibbs_C(5000)
 #' }
 #' @export
+
+##
 gibbs_C <- function(N) {
     .Call('_StatComp21095_gibbs_C', PACKAGE = 'StatComp21095', N)
 }
